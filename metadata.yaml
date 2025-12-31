@@ -1,5 +1,5 @@
 homepage: "https://trackinghippo.io"
 documentation: "https://github.com/trackinghippo-io/gtm-facebook-pixel-tag/blob/main/README.md"
 versions:
-  - sha: ee0082abce01c3eba11fc1b72b7416569efeaaa077b989eb979462029b438dd
+  - sha: 180758cdd582e930969d509b2a6db9ee9f1c9165
     changeNotes: Initial release of Facebook Pixel tag template.
