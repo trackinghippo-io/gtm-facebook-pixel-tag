@@ -524,6 +524,7 @@ const createQueue = require('createQueue');
 const getType = require('getType');
 const injectScript = require('injectScript');
 const isConsentGranted = require('isConsentGranted');
+const logToConsole = require('logToConsole');
 const makeNumber = require('makeNumber');
 const makeString = require('makeString');
 const setInWindow = require('setInWindow');
@@ -541,6 +542,9 @@ const STANDARD_EVENTS = [
   'CompleteRegistration', 'Contact', 'CustomizeProduct', 'Donate',
   'FindLocation', 'Schedule', 'StartTrial', 'SubmitApplication', 'Subscribe'
 ];
+
+// Parameters Meta expects as numbers; table values always arrive as strings.
+const NUMERIC_PARAMS = ['value', 'num_items', 'predicted_ltv'];
 
 const ensureFbq = () => {
   const existing = copyFromWindow(FBQ_KEY);
@@ -568,8 +572,7 @@ const ensureScript = () => {
   if (copyFromWindow(SCRIPT_FLAG_KEY)) {
     return;
   }
-  const fbq = copyFromWindow(FBQ_KEY) || copyFromWindow(FBQ_ALT_KEY);
-  if (fbq && fbq.callMethod) {
+  if (copyFromWindow(FBQ_KEY + '.callMethod')) {
     setInWindow(SCRIPT_FLAG_KEY, true, true);
     return;
   }
@@ -578,7 +581,10 @@ const ensureScript = () => {
     function() {
       setInWindow(SCRIPT_FLAG_KEY, true, true);
     },
-    function() {},
+    function() {
+      logToConsole('Facebook Pixel: failed to load ' + FBQ_URL +
+          ' (blocked by an ad blocker or network filter?). Queued events will not be sent.');
+    },
     SCRIPT_CACHE_KEY
   );
 };
@@ -646,12 +652,22 @@ const buildAdvancedMatching = () => {
   return hasKeys(match) ? match : null;
 };
 
+const coerceParamValue = (key, value) => {
+  if (NUMERIC_PARAMS.indexOf(key) !== -1 && getType(value) === 'string' && value !== '') {
+    const num = makeNumber(value);
+    if (num === num) {
+      return num;
+    }
+  }
+  return value;
+};
+
 const buildEventParams = () => {
   const params = {};
   const fromVariable = data.eventParamsVariable;
   if (getType(fromVariable) === 'object') {
     for (let key in fromVariable) {
-      addIfPresent(params, key, fromVariable[key]);
+      addIfPresent(params, key, coerceParamValue(key, fromVariable[key]));
     }
   }
   const table = data.eventParams;
@@ -661,7 +677,8 @@ const buildEventParams = () => {
       if (!row || !row.key) {
         continue;
       }
-      addIfPresent(params, makeString(row.key), row.value);
+      const key = makeString(row.key);
+      addIfPresent(params, key, coerceParamValue(key, row.value));
     }
   }
   if (data.testEventCode) {
@@ -680,6 +697,33 @@ const getInitCache = () => {
   return fresh;
 };
 
+const getExternallyInitedIds = () => {
+  const ids = {};
+  // Inits queued before fbevents.js has loaded (e.g. a hardcoded pixel snippet).
+  const queue = copyFromWindow(FBQ_KEY + '.queue');
+  if (getType(queue) === 'array') {
+    for (let i = 0; i < queue.length; i++) {
+      const entry = queue[i];
+      if (entry && entry[0] === 'init' && entry[1]) {
+        ids[makeString(entry[1])] = true;
+      }
+    }
+  }
+  // Pixels already registered with the loaded fbevents.js.
+  if (copyFromWindow(FBQ_KEY + '.getState')) {
+    const state = callInWindow(FBQ_KEY + '.getState');
+    const pixels = state && state.pixels;
+    if (getType(pixels) === 'array') {
+      for (let i = 0; i < pixels.length; i++) {
+        if (pixels[i] && pixels[i].id) {
+          ids[makeString(pixels[i].id)] = true;
+        }
+      }
+    }
+  }
+  return ids;
+};
+
 const pixelIds = makeString(data.pixelId || '')
     .split(',')
     .map(id => id.trim())
@@ -695,6 +739,7 @@ if (data.eventType === 'custom') {
 }
 
 if (!pixelIds.length || !eventName) {
+  logToConsole('Facebook Pixel: missing Pixel ID or event name; tag aborted.');
   data.gtmOnFailure();
   return;
 }
@@ -712,6 +757,8 @@ ensureScript();
 if (data.requireAdStorageConsent) {
   if (!isConsentGranted('ad_storage')) {
     fbq('consent', 'revoke');
+    logToConsole('Facebook Pixel: ad_storage consent not granted; event "' +
+        eventName + '" was not sent.');
     data.gtmOnSuccess();
     return;
   }
@@ -726,10 +773,18 @@ if (data.enableLDU) {
 
 const advancedMatching = buildAdvancedMatching();
 const initCache = getInitCache();
+const externallyInited = getExternallyInitedIds();
 let cacheChanged = false;
 
 pixelIds.forEach(pixelId => {
   if (initCache[pixelId]) {
+    return;
+  }
+  if (externallyInited[pixelId]) {
+    logToConsole('Facebook Pixel: pixel ' + pixelId +
+        ' was already initialized outside this template; skipping init.');
+    initCache[pixelId] = true;
+    cacheChanged = true;
     return;
   }
   if (data.disableAutoConfig) {
@@ -837,6 +892,27 @@ ___WEB_PERMISSIONS___
                 ]
               }
             ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "logging",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "environments",
+          "value": {
+            "type": 1,
+            "string": "debug"
           }
         }
       ]
@@ -972,6 +1048,45 @@ ___WEB_PERMISSIONS___
                   {
                     "type": 8,
                     "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "fbq.getState"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
                   }
                 ]
               },
@@ -1393,6 +1508,71 @@ scenarios:
     assertThat(params.test_event_code).isEqualTo('TEST123');
     const options = trackCalls[0][4];
     assertThat(options.eventID).isEqualTo('evt-1');
+    assertApi('gtmOnSuccess').wasCalled();
+- name: Numeric table parameters are converted to numbers
+  code: |-
+    const fbqCalls = [];
+    const fbqRecorder = function() {
+      const call = [];
+      for (let i = 0; i < arguments.length; i++) {
+        call.push(arguments[i]);
+      }
+      fbqCalls.push(call);
+    };
+    mock('copyFromWindow', key => {
+      if (key === 'fbq') return fbqRecorder;
+    });
+
+    const mockData = {
+      pixelId: '111',
+      eventType: 'Purchase',
+      eventParams: [
+        { key: 'value', value: '25.50' },
+        { key: 'num_items', value: '3' },
+        { key: 'content_ids', value: '12345' },
+        { key: 'currency', value: 'EUR' }
+      ]
+    };
+
+    runCode(mockData);
+
+    const trackCalls = fbqCalls.filter(c => c[0] === 'trackSingle');
+    assertThat(trackCalls.length).isEqualTo(1);
+    const params = trackCalls[0][3];
+    assertThat(params.value).isEqualTo(25.5);
+    assertThat(params.num_items).isEqualTo(3);
+    assertThat(params.content_ids).isEqualTo('12345');
+    assertThat(params.currency).isEqualTo('EUR');
+    assertApi('gtmOnSuccess').wasCalled();
+- name: Pixel initialized outside the template is not re-initialized
+  code: |-
+    const fbqCalls = [];
+    const fbqRecorder = function() {
+      const call = [];
+      for (let i = 0; i < arguments.length; i++) {
+        call.push(arguments[i]);
+      }
+      fbqCalls.push(call);
+    };
+    mock('copyFromWindow', key => {
+      if (key === 'fbq') return fbqRecorder;
+      if (key === 'fbq.queue') return [['init', '111']];
+    });
+
+    const mockData = {
+      pixelId: '111, 222',
+      eventType: 'PageView'
+    };
+
+    runCode(mockData);
+
+    const initCalls = fbqCalls.filter(c => c[0] === 'init');
+    assertThat(initCalls.length).isEqualTo(1);
+    assertThat(initCalls[0][1]).isEqualTo('222');
+    const trackCalls = fbqCalls.filter(c => c[0] === 'trackSingle');
+    assertThat(trackCalls.length).isEqualTo(2);
+    assertThat(trackCalls[0][1]).isEqualTo('111');
+    assertThat(trackCalls[1][1]).isEqualTo('222');
     assertApi('gtmOnSuccess').wasCalled();
 
 

@@ -10,14 +10,15 @@ This template loads the Facebook Pixel library once, initializes one or more Pix
 
 - **Standard + custom events**: Choose from all standard Facebook Pixel events, provide a custom event name, or resolve the event name from a variable. Standard names are sent with `trackSingle`, all others with `trackSingleCustom`.
 - **Multiple pixels**: Provide a comma-separated list of Pixel IDs; each is initialized once and events are sent per pixel with `trackSingle` (no cross-pixel leakage).
-- **Event parameters**: Pass optional parameters via a key/value table, an object variable, or both (table values win).
+- **Event parameters**: Pass optional parameters via a key/value table, an object variable, or both (table values win). Numeric parameters (`value`, `num_items`, `predicted_ltv`) are automatically converted to numbers.
 - **Test Events**: Optional `test_event_code` field for Facebook Test Events.
 - **Deduplication**: Optional `event_id` field for Conversions API deduplication (sent as `eventID` options).
 - **Consent Mode**: Optional `ad_storage` gate before sending events.
 - **Advanced Matching**: Manual user data fields, or map Google Tag Manager's built-in **User-Provided Data** variable (also accepts GA4-style `user_data` objects and objects already using Meta's `em`/`ph`/... keys).
 - **Limited Data Use (LDU)**: Optional `fbq('dataProcessingOptions', ['LDU'], country, state)` call for US privacy compliance.
 - **Configuration toggles**: Disable automatic configuration (`autoConfig`) and pushState/replaceState history tracking for SPAs.
-- **Optimized loading**: Pixel script is injected once and `init` is called once per Pixel ID.
+- **Optimized loading**: Pixel script is injected once and `init` is called once per Pixel ID. Pixels already initialized outside the template (e.g. a hardcoded snippet) are detected and not initialized again.
+- **Debug logging**: In GTM Preview mode the template logs to the console when a script fails to load, an event is dropped because of missing consent, or an init is skipped.
 
 ## Installation
 
@@ -95,9 +96,12 @@ When enabled, the template calls `fbq('dataProcessingOptions', ['LDU'], country,
 This template requires access to the following global objects:
 
 - `fbq`, `_fbq` (read/write)
+- `fbq.getState` (read/execute, used to detect pixels initialized outside the template)
 - `fbq.disablePushState` (read/write)
 - `__th_fbq_inited_ids` (read/write)
 - `__th_fbq_script_loaded` (read/write)
+
+It also logs to the console in debug/preview environments only.
 
 ## License
 
