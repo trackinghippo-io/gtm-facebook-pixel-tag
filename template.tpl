@@ -655,7 +655,8 @@ const buildAdvancedMatching = () => {
 const coerceParamValue = (key, value) => {
   if (NUMERIC_PARAMS.indexOf(key) !== -1 && getType(value) === 'string' && value !== '') {
     const num = makeNumber(value);
-    if (num === num) {
+    // NaN is falsy, so this keeps the original string for non-numeric input.
+    if (num || num === 0) {
       return num;
     }
   }
