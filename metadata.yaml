@@ -1,7 +1,13 @@
 homepage: "https://trackinghippo.io"
 documentation: "https://github.com/trackinghippo-io/gtm-facebook-pixel-tag/blob/main/README.md"
 versions:
-  - sha: a1f80fb8141f8c2009b5ec4d15047c35e1c7d29e
+  - sha: 6bf5900ae219a8ad9e4e9ca36a448489ee6c9fe9
+    changeNotes: >-
+      Skip re-initializing pixels already initialized outside the template,
+      coerce numeric event parameters (value, num_items, predicted_ltv) sent
+      as strings, and add console diagnostics for blocked pixel scripts,
+      missing configuration, and revoked consent.
+  - sha: 2d668ec4615bda57b5ce089d08aa885bc1397871
     changeNotes: >-
       Add Advanced Matching from Google's User-Provided Data variable,
       multi-pixel support with trackSingle, event name and parameters from
