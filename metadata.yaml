@@ -1,6 +1,10 @@
 homepage: "https://trackinghippo.io"
 documentation: "https://github.com/trackinghippo-io/gtm-facebook-pixel-tag/blob/main/README.md"
 versions:
+  - sha: 78071155e530614e76746ac507210adbf2cbbb81
+    changeNotes: >-
+      Add a branded icon/thumbnail (TrackingHippo.io) to the template's
+      gallery listing.
   - sha: 6bf5900ae219a8ad9e4e9ca36a448489ee6c9fe9
     changeNotes: >-
       Skip re-initializing pixels already initialized outside the template,
